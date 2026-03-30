@@ -1,47 +1,47 @@
-# 🚀 GitPushBot - GitHub File Manager
+# 🚀 GitPushBot - Your GitHub Manager on Telegram
 
-GitPushBot is a powerful Telegram bot that allows you to manage your GitHub repositories directly from Telegram. You can upload (push) files, delete files, and navigate through your repository structure with ease.
+**GitPushBot** is a high-performance, open-source Telegram bot designed to bridge the gap between your local files and GitHub repositories. It allows developers to manage their code directly from the Telegram interface with ease and security.
 
-## ✨ Features
+---
 
-- **Direct Upload:** Send any file to the bot, and it will push it to your selected GitHub repository.
-- **File Management:** List and delete files in your repositories.
-- **Directory Navigation:** Browse through folders in your repositories.
-- **Secure:** Uses GitHub Personal Access Tokens (PAT) which are only stored in your session.
-- **Open Source:** Easy to deploy and customize.
+## 🧐 What It Does
+GitPushBot provides a seamless mobile-first experience for GitHub management. 
+- **Pushes Files:** Send any document (code, images, text) to the bot, and it will instantly upload or update it in your repository.
+- **Deletes Files:** Browse your repo and remove files you no longer need.
+- **Navigates Directories:** Explore your repository structure through intuitive inline buttons.
+- **Multi-Repo Support:** Switch between all your repositories in seconds.
 
-## 🚀 Getting Started
+## ⚙️ How It Works
+1. **Authentication:** The bot uses your **GitHub Personal Access Token (PAT)**. This token is stored only within your Telegram session for maximum security.
+2. **Session Logic:** It utilizes a `ConversationHandler` to guide you through selecting a repo and performing actions.
+3. **API Integration:** Powered by `PyGithub`, it interacts with the GitHub REST API to perform file operations on the `main` branch.
+4. **UI/UX:** Uses Telegram's HTML styling and inline keyboards for a modern, dashboard-like feel.
 
-### 1. Prerequisites
-- Python 3.10+
-- A Telegram Bot Token from [@BotFather](https://t.me/BotFather)
-- A GitHub Personal Access Token (PAT) with `repo` permissions.
+---
 
-### 2. Installation
-```bash
-git clone https://github.com/ankurmoran96-openai/GitPushBot.git
-cd GitPushBot
-pip install -r requirements.txt
-```
+## 👨‍💻 Developed By
+**GitPushBot** was created with ❤️ by **Ankur** ([@Ankurslys](https://t.me/Ankurslys)).
 
-### 3. Configuration
-Create a `.env` file in the root directory and add your Telegram Bot Token:
-```env
-TELEGRAM_BOT_TOKEN=your_bot_token_here
-```
+---
 
-### 4. Run the Bot
-```bash
-python bot.py
-```
+## 🚀 Setup & Installation
 
-## 🛠 Tech Stack
-- **[python-telegram-bot](https://python-telegram-bot.org/)**: Telegram API wrapper.
-- **[PyGithub](https://github.com/PyGithub/PyGithub)**: GitHub API library.
-- **[python-dotenv](https://github.com/theskumar/python-dotenv)**: Environment variable management.
-
-## 👨‍💻 Developer
-Created with ❤️ by [Ankur](https://t.me/Ankurslys).
+### For Normal Users
+1. **Clone the Repo:**
+   ```bash
+   git clone https://github.com/ankurmoran96-openai/GitPushBot.git
+   cd GitPushBot
+   ```
+2. **Install Dependencies:**
+   ```bash
+   pip install -r requirements.txt
+   ```
+3. **Configure:**
+   Rename `config.py` and add your bot token, or use a `.env` file.
+4. **Run:**
+   ```bash
+   python bot.py
+   ```
 
 ## 📄 License
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+This project is licensed under the **MIT License**.
