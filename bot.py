@@ -72,7 +72,20 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
             [InlineKeyboardButton("📖 How To Use", callback_data="how_to_use")]
         ]
         reply_markup = InlineKeyboardMarkup(keyboard)
-        await update.message.reply_html(welcome_text, reply_markup=reply_markup)
+        
+        banner_path = os.path.join(os.path.dirname(__file__), "banner.jpg")
+        
+        if os.path.exists(banner_path):
+            with open(banner_path, 'rb') as banner:
+                if update.message:
+                    await update.message.reply_photo(photo=banner, caption=welcome_text, reply_markup=reply_markup, parse_mode=ParseMode.HTML)
+                else:
+                    await context.bot.send_photo(chat_id=update.effective_chat.id, photo=banner, caption=welcome_text, reply_markup=reply_markup, parse_mode=ParseMode.HTML)
+        else:
+            if update.message:
+                await update.message.reply_html(welcome_text, reply_markup=reply_markup)
+            else:
+                await context.bot.send_message(chat_id=update.effective_chat.id, text=welcome_text, reply_markup=reply_markup, parse_mode=ParseMode.HTML)
         return SETTING_TOKEN
     
     return await list_repos(update, context)
@@ -98,6 +111,8 @@ async def how_to_use_callback(update: Update, context: ContextTypes.DEFAULT_TYPE
 async def back_to_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
+    # Delete the message with buttons so start() can send a NEW message (with photo)
+    await query.delete_message()
     return await start(update, context)
 
 async def receive_token(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
