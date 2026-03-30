@@ -25,15 +25,15 @@ logger = logging.getLogger(__name__)
 # States for ConversationHandler
 SETTING_TOKEN, SELECTING_REPO, SELECTING_ACTION, LISTING_CONTENTS, SELECTING_DOWNLOAD_TYPE = range(5)
 
-# UI Constant
-BANNER = "*🚀 GitPushBot | GitHub Manager*\n━━━━━━━━━━━━━━━━━━━━━━\n"
-
 def escape_md(text):
     """Escapes special characters for Telegram MarkdownV2."""
     if not text: return ""
-    # Characters that must be escaped in MarkdownV2
+    # Characters that must be escaped in MarkdownV2: _ * [ ] ( ) ~ ` > # + - = | { } . !
     escape_chars = r'_*[]()~`>#+-=|{}.!'
     return re.sub(f'([{re.escape(escape_chars)}])', r'\\\1', str(text))
+
+# UI Constant
+BANNER = "*🚀 GitPushBot \\| GitHub Manager*\n━━━━━━━━━━━━━━━━━━━━━━\n"
 
 def get_github_client(context: ContextTypes.DEFAULT_TYPE):
     """Get GitHub client for the current user."""
@@ -53,7 +53,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
             f"Hello, *{first_name}*\\! 👋\n\n"
             "Welcome to the most advanced GitHub Management partner on Telegram\\. This bot is designed to turn your mobile device into a powerful development workstation, allowing you to bridge the gap between your local files and remote repositories with zero friction\\.\n\n"
             "Whether you are an open\\-source contributor or a private developer, our system provides a high\\-performance interface to interact with the GitHub REST API securely and efficiently\\. You can manage multiple repositories, navigate complex directory structures, and perform critical file operations directly from this chat\\.\n\n"
-            "🛡 *Identity & Security*\n"
+            "🛡 *Identity \\& Security*\n"
             "We prioritize your safety\\. The bot uses your *GitHub Personal Access Token \\(PAT\\)* to authenticate sessions\\. This token is stored only within your encrypted Telegram session and is never logged or shared\\. For maximum security, we recommend using *Fine\\-grained tokens* restricted to specific repositories with 'Contents' Read/Write permissions\\.\n\n"
             "🚀 *Key Features*\n"
             "• *Instant Uploads:* Send any document or code file, and it will be pushed to your chosen branch immediately\\.\n"
