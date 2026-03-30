@@ -42,6 +42,16 @@ def get_github_client(context: ContextTypes.DEFAULT_TYPE):
         return None
     return Github(token)
 
+async def error_handler(update: object, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Log the error and send a message to the user."""
+    logger.error(msg="Exception while handling an update:", exc_info=context.error)
+    if isinstance(update, Update) and update.effective_message:
+        error_msg = f"❌ *Technical Error:*\n`{escape_md(str(context.error))}`"
+        try:
+            await update.effective_message.reply_markdown_v2(error_msg)
+        except:
+            await update.effective_message.reply_text(f"❌ Technical Error: {str(context.error)}")
+
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     """Start the bot and check for GitHub token."""
     user = update.effective_user
@@ -429,6 +439,7 @@ def main():
         ],
     )
 
+    application.add_error_handler(error_handler)
     application.add_handler(conv_handler)
     application.add_handler(CommandHandler("logout", logout))
     application.add_handler(MessageHandler(filters.Document.ALL & ~filters.COMMAND, handle_document))
