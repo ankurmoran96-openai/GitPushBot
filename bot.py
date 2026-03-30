@@ -1,5 +1,6 @@
 import os
 import logging
+import html
 from github import Github
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.constants import ParseMode
@@ -36,10 +37,12 @@ def get_github_client(context: ContextTypes.DEFAULT_TYPE):
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     """Start the bot and check for GitHub token."""
     user = update.effective_user
+    first_name = html.escape(user.first_name) if user.first_name else "User"
+    
     if 'github_token' not in context.user_data:
         welcome_text = (
             f"{BANNER}"
-            f"Hello, <b>{user.first_name}</b>! 👋\n\n"
+            f"Hello, <b>{first_name}</b>! 👋\n\n"
             "To manage your repositories, please provide your <b>GitHub Personal Access Token (PAT)</b>.\n\n"
             "🔑 <i>How to get one: Settings > Developer Settings > Personal Access Tokens > Tokens (classic).</i>\n\n"
             "🛡 <b>Security:</b> Ensure you grant <code>repo</code> permissions."
@@ -56,7 +59,7 @@ async def receive_token(update: Update, context: ContextTypes.DEFAULT_TYPE) -> i
     try:
         g = Github(token)
         user = g.get_user()
-        username = user.login
+        username = html.escape(user.login)
         
         context.user_data['github_token'] = token
         context.user_data['github_username'] = username
@@ -83,7 +86,8 @@ async def list_repos(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
         
         keyboard = []
         for repo in repos:
-            keyboard.append([InlineKeyboardButton(f"📁 {repo.name}", callback_data=f"repo:{repo.name}")])
+            repo_name = html.escape(repo.name)
+            keyboard.append([InlineKeyboardButton(f"📁 {repo_name}", callback_data=f"repo:{repo.name}")])
         
         if not keyboard:
             await loading_msg.edit_text("❌ No repositories found.")
@@ -101,7 +105,10 @@ async def repo_choice(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int
     query = update.callback_query
     await query.answer()
     
-    repo_name = query.data.split(":")[1]
+    data_parts = query.data.split(":")
+    repo_name = data_parts[1]
+    safe_repo_name = html.escape(repo_name)
+    
     context.user_data['repo_name'] = repo_name
     context.user_data['current_path'] = ""
     
@@ -113,7 +120,7 @@ async def repo_choice(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int
     reply_markup = InlineKeyboardMarkup(keyboard)
     await query.edit_message_text(
         f"{BANNER}"
-        f"📍 <b>Repo:</b> <code>{repo_name}</code>\n\n"
+        f"📍 <b>Repo:</b> <code>{safe_repo_name}</code>\n\n"
         "What would you like to do?", 
         reply_markup=reply_markup,
         parse_mode=ParseMode.HTML
@@ -138,18 +145,19 @@ async def list_contents(update: Update, context: ContextTypes.DEFAULT_TYPE) -> i
             keyboard.append([InlineKeyboardButton("📁 .. (Parent)", callback_data=f"cd:{parent_path}")])
 
         for content in contents:
+            content_path = html.escape(content.path)
             if content.type == "dir":
-                keyboard.append([InlineKeyboardButton(f"📁 {content.path}", callback_data=f"cd:{content.path}")])
+                keyboard.append([InlineKeyboardButton(f"📁 {content_path}", callback_data=f"cd:{content.path}")])
             else:
-                keyboard.append([InlineKeyboardButton(f"📄 {content.path}", callback_data=f"delete:{content.path}")])
+                keyboard.append([InlineKeyboardButton(f"📄 {content_path}", callback_data=f"delete:{content.path}")])
         
         keyboard.append([InlineKeyboardButton("🔙 Back to Menu", callback_data="back_to_menu")])
         reply_markup = InlineKeyboardMarkup(keyboard)
         
-        display_path = path if path else "Root"
+        display_path = html.escape(path) if path else "Root"
         await query.edit_message_text(
             f"{BANNER}"
-            f"📂 <b>Path:</b> <code>{repo_name}/{display_path}</code>\n\n"
+            f"📂 <b>Path:</b> <code>{html.escape(repo_name)}/{display_path}</code>\n\n"
             "<i>Select a file to DELETE or folder to navigate.</i>", 
             reply_markup=reply_markup,
             parse_mode=ParseMode.HTML
