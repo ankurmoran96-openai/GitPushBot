@@ -1,6 +1,7 @@
 import os
 import logging
 import html
+import io
 from github import Github
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.constants import ParseMode
@@ -22,7 +23,7 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 # States for ConversationHandler
-SETTING_TOKEN, SELECTING_REPO, SELECTING_ACTION, LISTING_CONTENTS = range(4)
+SETTING_TOKEN, SELECTING_REPO, SELECTING_ACTION, LISTING_CONTENTS, SELECTING_DOWNLOAD_TYPE = range(5)
 
 # UI Constant
 BANNER = "<b>🚀 GitPushBot | GitHub Manager</b>\n━━━━━━━━━━━━━━━━━━━━━━\n"
@@ -44,8 +45,8 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
             f"{BANNER}"
             f"Hello, <b>{first_name}</b>! 👋\n\n"
             "To manage your repositories, please provide your <b>GitHub Personal Access Token (PAT)</b>.\n\n"
-            "🔑 <i>How to get one: Settings > Developer Settings > Personal Access Tokens > Tokens (classic).</i>\n\n"
-            "🛡 <b>Security:</b> Ensure you grant <code>repo</code> permissions."
+            "🔑 <i>How to get one: Settings > Developer Settings > Personal Access Tokens.</i>\n\n"
+            "🛡 <b>Security:</b> We recommend using <b>Fine-grained tokens</b> with <i>Contents (Read/Write)</i> permissions. Alternatively, use <b>Tokens (classic)</b> with <code>repo</code> scope."
         )
         await update.message.reply_html(welcome_text)
         return SETTING_TOKEN
@@ -78,7 +79,11 @@ async def list_repos(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
         await update.effective_message.reply_html("⚠️ <b>Session Expired.</b> Please use /start.")
         return ConversationHandler.END
 
-    loading_msg = await update.effective_message.reply_html("🔄 <b>Fetching repositories...</b>")
+    if update.callback_query:
+        await update.callback_query.answer()
+        loading_msg = await update.callback_query.edit_message_text("🔄 <b>Fetching repositories...</b>", parse_mode=ParseMode.HTML)
+    else:
+        loading_msg = await update.effective_message.reply_html("🔄 <b>Fetching repositories...</b>")
     
     try:
         user_gh = g.get_user()
@@ -112,27 +117,92 @@ async def repo_choice(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int
     context.user_data['repo_name'] = repo_name
     context.user_data['current_path'] = ""
     
+    return await show_action_menu(update, context)
+
+async def show_action_menu(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    repo_name = context.user_data['repo_name']
     keyboard = [
-        [InlineKeyboardButton("📤 Initiate (Upload File)", callback_data="initiate")],
-        [InlineKeyboardButton("🗑 Delete File", callback_data="list_contents")],
+        [InlineKeyboardButton("📤 Initiate (Upload)", callback_data="initiate")],
+        [InlineKeyboardButton("📥 Download (Get File)", callback_data="download_menu")],
+        [InlineKeyboardButton("🗑 Delete File", callback_data="list_contents_delete")],
         [InlineKeyboardButton("🔙 Back to Repos", callback_data="back_to_repos")]
     ]
     reply_markup = InlineKeyboardMarkup(keyboard)
+    msg_text = f"{BANNER}📍 <b>Repo:</b> <code>{html.escape(repo_name)}</code>\nWhat would you like to do?"
+    
+    if update.callback_query:
+        await update.callback_query.edit_message_text(msg_text, reply_markup=reply_markup, parse_mode=ParseMode.HTML)
+    else:
+        await update.message.reply_html(msg_text, reply_markup=reply_markup)
+    return SELECTING_ACTION
+
+async def download_menu_prompt(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    query = update.callback_query
+    await query.answer()
+    repo_name = context.user_data['repo_name']
+    
+    keyboard = [
+        [InlineKeyboardButton("📦 Full Repo (ZIP)", callback_data="download_zip")],
+        [InlineKeyboardButton("📄 Specific File", callback_data="list_contents_download")],
+        [InlineKeyboardButton("🔙 Back", callback_data="back_to_menu")]
+    ]
+    reply_markup = InlineKeyboardMarkup(keyboard)
     await query.edit_message_text(
-        f"{BANNER}"
-        f"📍 <b>Repo:</b> <code>{safe_repo_name}</code>\n\n"
-        "What would you like to do?", 
+        f"{BANNER}📥 <b>Download:</b> <code>{html.escape(repo_name)}</code>\n"
+        "Do you want the entire repository as a ZIP or select a single file?",
         reply_markup=reply_markup,
         parse_mode=ParseMode.HTML
     )
-    return SELECTING_ACTION
+    return SELECTING_DOWNLOAD_TYPE
+
+async def download_zip_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    query = update.callback_query
+    await query.answer()
+    repo_name = context.user_data['repo_name']
+    g = get_github_client(context)
+    repo = g.get_user().get_repo(repo_name)
+
+    status_msg = await query.edit_message_text(f"⏳ <b>Preparing ZIP for</b> <code>{html.escape(repo_name)}</code>...")
+    
+    try:
+        archive_url = repo.get_archive_link("zipball")
+        await context.bot.send_document(
+            chat_id=update.effective_chat.id,
+            document=archive_url,
+            filename=f"{repo_name}_main.zip",
+            caption=f"📦 <b>Archive for</b> <code>{html.escape(repo_name)}</code> (main branch)"
+        )
+        await status_msg.delete()
+        return await show_action_menu(update, context)
+    except Exception as e:
+        logger.error(f"ZIP error: {e}")
+        await query.edit_message_text(f"❌ <b>ZIP Failed:</b>\n{e}")
+        return SELECTING_ACTION
 
 async def list_contents(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     query = update.callback_query
     await query.answer()
     
+    if query.data == "list_contents_delete":
+        context.user_data['action_type'] = "delete"
+        context.user_data['current_path'] = ""
+    elif query.data == "list_contents_download":
+        context.user_data['action_type'] = "download"
+        context.user_data['current_path'] = ""
+
+    return await render_contents(update, context)
+
+async def handle_cd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    query = update.callback_query
+    path = query.data.split(":", 1)[1]
+    context.user_data['current_path'] = path
+    return await render_contents(update, context)
+
+async def render_contents(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    query = update.callback_query
     repo_name = context.user_data['repo_name']
     path = context.user_data.get('current_path', "")
+    action = context.user_data.get('action_type', "delete")
     g = get_github_client(context)
     repo = g.get_user().get_repo(repo_name)
     
@@ -149,16 +219,18 @@ async def list_contents(update: Update, context: ContextTypes.DEFAULT_TYPE) -> i
             if content.type == "dir":
                 keyboard.append([InlineKeyboardButton(f"📁 {content_path}", callback_data=f"cd:{content.path}")])
             else:
-                keyboard.append([InlineKeyboardButton(f"📄 {content_path}", callback_data=f"delete:{content.path}")])
+                prefix = "🗑" if action == "delete" else "📥"
+                callback_prefix = "delete" if action == "delete" else "download_file"
+                keyboard.append([InlineKeyboardButton(f"{prefix} {content_path}", callback_data=f"{callback_prefix}:{content.path}")])
         
-        keyboard.append([InlineKeyboardButton("🔙 Back to Menu", callback_data="back_to_menu")])
+        keyboard.append([InlineKeyboardButton("🔙 Back", callback_data="back_to_menu")])
         reply_markup = InlineKeyboardMarkup(keyboard)
         
         display_path = html.escape(path) if path else "Root"
+        mode_text = "DELETE" if action == "delete" else "DOWNLOAD"
         await query.edit_message_text(
-            f"{BANNER}"
-            f"📂 <b>Path:</b> <code>{html.escape(repo_name)}/{display_path}</code>\n\n"
-            "<i>Select a file to DELETE or folder to navigate.</i>", 
+            f"{BANNER}📂 <b>{mode_text} Path:</b> <code>{html.escape(repo_name)}/{display_path}</code>\n\n"
+            "<i>Select a file or folder.</i>", 
             reply_markup=reply_markup,
             parse_mode=ParseMode.HTML
         )
@@ -168,17 +240,11 @@ async def list_contents(update: Update, context: ContextTypes.DEFAULT_TYPE) -> i
         await query.edit_message_text(f"❌ Error listing contents: {e}")
         return SELECTING_ACTION
 
-async def handle_cd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    query = update.callback_query
-    path = query.data.split(":")[1]
-    context.user_data['current_path'] = path
-    return await list_contents(update, context)
-
 async def delete_file_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     query = update.callback_query
     await query.answer()
     
-    file_path = query.data.split(":")[1]
+    file_path = query.data.split(":", 1)[1]
     repo_name = context.user_data['repo_name']
     g = get_github_client(context)
     repo = g.get_user().get_repo(repo_name)
@@ -186,11 +252,37 @@ async def delete_file_callback(update: Update, context: ContextTypes.DEFAULT_TYP
     try:
         contents = repo.get_contents(file_path)
         repo.delete_file(contents.path, f"Deleted {file_path} via Bot", contents.sha, branch="main")
-        await query.edit_message_text(f"✅ <b>Successfully Deleted:</b>\n<code>{file_path}</code>")
+        await query.edit_message_text(f"✅ <b>Successfully Deleted:</b>\n<code>{html.escape(file_path)}</code>")
         return await show_action_menu(update, context)
     except Exception as e:
         logger.error(f"Error deleting file: {e}")
         await query.edit_message_text(f"❌ <b>Deletion Failed:</b>\n{e}")
+        return SELECTING_ACTION
+
+async def download_file_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    query = update.callback_query
+    await query.answer()
+    
+    file_path = query.data.split(":", 1)[1]
+    repo_name = context.user_data['repo_name']
+    g = get_github_client(context)
+    repo = g.get_user().get_repo(repo_name)
+    
+    status_msg = await query.edit_message_text(f"⏳ <b>Downloading</b> <code>{html.escape(file_path)}</code>...")
+    
+    try:
+        contents = repo.get_contents(file_path)
+        await context.bot.send_document(
+            chat_id=update.effective_chat.id,
+            document=contents.download_url,
+            filename=contents.name,
+            caption=f"📥 <b>File:</b> <code>{html.escape(file_path)}</code>"
+        )
+        await status_msg.delete()
+        return await show_action_menu(update, context)
+    except Exception as e:
+        logger.error(f"Download file error: {e}")
+        await query.edit_message_text(f"❌ <b>Download Failed:</b>\n{e}")
         return SELECTING_ACTION
 
 async def initiate_prompt(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
@@ -212,7 +304,7 @@ async def handle_document(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
     document = update.message.document
     file_name = document.file_name
     
-    status_msg = await update.message.reply_html(f"🔄 <b>Uploading</b> <code>{file_name}</code>...")
+    status_msg = await update.message.reply_html(f"🔄 <b>Uploading</b> <code>{html.escape(file_name)}</code>...")
     
     try:
         file = await context.bot.get_file(document.file_id)
@@ -224,34 +316,16 @@ async def handle_document(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
         try:
             contents = repo.get_contents(file_name, ref="main")
             repo.update_file(contents.path, f"Update {file_name} via Bot", bytes(file_bytes), contents.sha, branch="main")
-            await status_msg.edit_text(f"✅ <b>Updated:</b> <code>{file_name}</code>", parse_mode=ParseMode.HTML)
+            await status_msg.edit_text(f"✅ <b>Updated:</b> <code>{html.escape(file_name)}</code>", parse_mode=ParseMode.HTML)
         except:
             repo.create_file(file_name, f"Upload {file_name} via Bot", bytes(file_bytes), branch="main")
-            await status_msg.edit_text(f"✅ <b>Uploaded:</b> <code>{file_name}</code>", parse_mode=ParseMode.HTML)
+            await status_msg.edit_text(f"✅ <b>Uploaded:</b> <code>{html.escape(file_name)}</code>", parse_mode=ParseMode.HTML)
             
-        return await show_action_menu_message(update, context)
+        return await show_action_menu(update, context)
     except Exception as e:
         logger.error(f"Error uploading file: {e}")
         await update.message.reply_html(f"❌ <b>Upload Failed:</b>\n{e}")
         return SELECTING_ACTION
-
-async def show_action_menu(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    repo_name = context.user_data['repo_name']
-    keyboard = [
-        [InlineKeyboardButton("📤 Initiate (Upload File)", callback_data="initiate")],
-        [InlineKeyboardButton("🗑 Delete File", callback_data="list_contents")],
-        [InlineKeyboardButton("🔙 Back to Repos", callback_data="back_to_repos")]
-    ]
-    reply_markup = InlineKeyboardMarkup(keyboard)
-    msg_text = f"{BANNER}📍 <b>Repo:</b> <code>{repo_name}</code>\nWhat's next?"
-    if update.callback_query:
-        await update.callback_query.message.reply_html(msg_text, reply_markup=reply_markup)
-    else:
-        await update.message.reply_html(msg_text, reply_markup=reply_markup)
-    return SELECTING_ACTION
-
-async def show_action_menu_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    return await show_action_menu(update, context)
 
 async def back_to_menu(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     await update.callback_query.answer()
@@ -287,13 +361,20 @@ def main():
             SELECTING_REPO: [CallbackQueryHandler(repo_choice, pattern="^repo:")],
             SELECTING_ACTION: [
                 CallbackQueryHandler(initiate_prompt, pattern="^initiate$"),
-                CallbackQueryHandler(list_contents, pattern="^list_contents$"),
+                CallbackQueryHandler(download_menu_prompt, pattern="^download_menu$"),
+                CallbackQueryHandler(list_contents, pattern="^list_contents_"),
                 CallbackQueryHandler(list_repos, pattern="^back_to_repos$"),
                 MessageHandler(filters.Document.ALL, handle_document),
+            ],
+            SELECTING_DOWNLOAD_TYPE: [
+                CallbackQueryHandler(download_zip_callback, pattern="^download_zip$"),
+                CallbackQueryHandler(list_contents, pattern="^list_contents_download$"),
+                CallbackQueryHandler(show_action_menu, pattern="^back_to_menu$"),
             ],
             LISTING_CONTENTS: [
                 CallbackQueryHandler(handle_cd, pattern="^cd:"),
                 CallbackQueryHandler(delete_file_callback, pattern="^delete:"),
+                CallbackQueryHandler(download_file_callback, pattern="^download_file:"),
                 CallbackQueryHandler(back_to_menu, pattern="^back_to_menu$"),
             ],
         },
