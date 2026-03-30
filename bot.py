@@ -2,6 +2,7 @@ import os
 import logging
 import io
 import re
+import html
 from github import Github
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.constants import ParseMode
@@ -25,15 +26,8 @@ logger = logging.getLogger(__name__)
 # States for ConversationHandler
 SETTING_TOKEN, SELECTING_REPO, SELECTING_ACTION, LISTING_CONTENTS, SELECTING_DOWNLOAD_TYPE = range(5)
 
-def escape_md(text):
-    """Escapes special characters for Telegram MarkdownV2."""
-    if not text: return ""
-    # Characters that must be escaped in MarkdownV2: _ * [ ] ( ) ~ ` > # + - = | { } . !
-    escape_chars = r'_*[]()~`>#+-=|{}.!'
-    return re.sub(f'([{re.escape(escape_chars)}])', r'\\\1', str(text))
-
 # UI Constant
-BANNER = "*🚀 GitPushBot \\| GitHub Manager*\n━━━━━━━━━━━━━━━━━━━━━━\n"
+BANNER = "<b>🚀 GitPushBot | GitHub Manager</b>\n━━━━━━━━━━━━━━━━━━━━━━\n"
 
 def get_github_client(context: ContextTypes.DEFAULT_TYPE):
     """Get GitHub client for the current user."""
@@ -46,31 +40,31 @@ async def error_handler(update: object, context: ContextTypes.DEFAULT_TYPE) -> N
     """Log the error and send a message to the user."""
     logger.error(msg="Exception while handling an update:", exc_info=context.error)
     if isinstance(update, Update) and update.effective_message:
-        error_msg = f"❌ *Technical Error:*\n`{escape_md(str(context.error))}`"
+        error_msg = f"❌ <b>Technical Error:</b>\n<code>{html.escape(str(context.error))}</code>"
         try:
-            await update.effective_message.reply_markdown_v2(error_msg)
+            await update.effective_message.reply_html(error_msg)
         except:
             await update.effective_message.reply_text(f"❌ Technical Error: {str(context.error)}")
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     """Start the bot and check for GitHub token."""
     user = update.effective_user
-    first_name = escape_md(user.first_name) if user.first_name else "User"
+    first_name = html.escape(user.first_name) if user.first_name else "User"
     
     if 'github_token' not in context.user_data:
         welcome_text = (
             f"{BANNER}"
-            f"Hello, *{first_name}*\\! 👋\n\n"
-            "Welcome to the most advanced GitHub Management partner on Telegram\\. This bot is designed to turn your mobile device into a powerful development workstation, allowing you to bridge the gap between your local files and remote repositories with zero friction\\.\n\n"
-            "Whether you are an open\\-source contributor or a private developer, our system provides a high\\-performance interface to interact with the GitHub REST API securely and efficiently\\. You can manage multiple repositories, navigate complex directory structures, and perform critical file operations directly from this chat\\.\n\n"
-            "🛡 *Identity \\& Security*\n"
-            "We prioritize your safety\\. The bot uses your *GitHub Personal Access Token \\(PAT\\)* to authenticate sessions\\. This token is stored only within your encrypted Telegram session and is never logged or shared\\. For maximum security, we recommend using *Fine\\-grained tokens* restricted to specific repositories with 'Contents' Read/Write permissions\\.\n\n"
-            "🚀 *Key Features*\n"
-            "• *Instant Uploads:* Send any document or code file, and it will be pushed to your chosen branch immediately\\.\n"
-            "• *Smart Deletion:* Browse your repo structure and remove obsolete files with a single click\\.\n"
-            "• *Archive Generation:* Download entire repositories as compressed ZIP files for offline access\\.\n"
-            "• *Seamless Navigation:* Explore deep folders using interactive inline keyboards that update the same message to keep your chat clean\\.\n\n"
-            "🔑 *To begin, please provide your GitHub Personal Access Token \\(PAT\\)*\\."
+            f"Hello, <b>{first_name}</b>! 👋\n\n"
+            "Welcome to the most advanced GitHub Management partner on Telegram. This bot is designed to turn your mobile device into a powerful development workstation, allowing you to bridge the gap between your local files and remote repositories with zero friction.\n\n"
+            "Whether you are an open-source contributor or a private developer, our system provides a high-performance interface to interact with the GitHub REST API securely and efficiently. You can manage multiple repositories, navigate complex directory structures, and perform critical file operations directly from this chat.\n\n"
+            "🛡 <b>Identity & Security</b>\n"
+            "We prioritize your safety. The bot uses your <b>GitHub Personal Access Token (PAT)</b> to authenticate sessions. This token is stored only within your encrypted Telegram session and is never logged or shared. For maximum security, we recommend using <b>Fine-grained tokens</b> restricted to specific repositories with 'Contents' Read/Write permissions.\n\n"
+            "🚀 <b>Key Features</b>\n"
+            "• <b>Instant Uploads:</b> Send any document or code file, and it will be pushed to your chosen branch immediately.\n"
+            "• <b>Smart Deletion:</b> Browse your repo structure and remove obsolete files with a single click.\n"
+            "• <b>Archive Generation:</b> Download entire repositories as compressed ZIP files for offline access.\n"
+            "• <b>Seamless Navigation:</b> Explore deep folders using interactive inline keyboards that update the same message to keep your chat clean.\n\n"
+            "🔑 <b>To begin, please provide your GitHub Personal Access Token (PAT)</b>."
         )
         keyboard = [
             [InlineKeyboardButton("👨‍💻 Dev - @Ankurslys", url="https://t.me/Ankurslys")],
@@ -78,7 +72,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
             [InlineKeyboardButton("📖 How To Use", callback_data="how_to_use")]
         ]
         reply_markup = InlineKeyboardMarkup(keyboard)
-        await update.message.reply_markdown_v2(welcome_text, reply_markup=reply_markup)
+        await update.message.reply_html(welcome_text, reply_markup=reply_markup)
         return SETTING_TOKEN
     
     return await list_repos(update, context)
@@ -90,16 +84,16 @@ async def how_to_use_callback(update: Update, context: ContextTypes.DEFAULT_TYPE
     
     help_text = (
         f"{BANNER}"
-        "*How To Use GitPushBot*\n\n"
-        "1\\) *Generate a Token:* Go to GitHub Settings > Developer Settings > Personal Access Tokens\\. We recommend *Fine\\-grained* tokens for better security control\\.\n\n"
-        "2\\) *Authenticate:* Paste your token here\\. The bot will verify it and fetch your repository list automatically\\.\n\n"
-        "3\\) *Select Repository:* Click on any folder icon to enter a repo\\. All subsequent actions will happen inside this specific repository until you go back\\.\n\n"
-        "4\\) *Push Files:* Once inside a repo, click 'Initiate' then simply send a file to this chat\\. The bot will upload it to the 'main' branch by default\\.\n\n"
-        "5\\) *Manage Assets:* Use the 'Delete' menu to browse and remove files, or use the 'Download' menu to get single files or the entire repo as a ZIP\\.\n\n"
-        "6\\) *Clean Session:* Use /logout anytime to wipe your token from the bot's temporary memory\\."
+        "<b>How To Use GitPushBot</b>\n\n"
+        "1) <b>Generate a Token:</b> Go to GitHub Settings > Developer Settings > Personal Access Tokens. We recommend <b>Fine-grained</b> tokens for better security control.\n\n"
+        "2) <b>Authenticate:</b> Paste your token here. The bot will verify it and fetch your repository list automatically.\n\n"
+        "3) <b>Select Repository:</b> Click on any folder icon to enter a repo. All subsequent actions will happen inside this specific repository until you go back.\n\n"
+        "4) <b>Push Files:</b> Once inside a repo, click 'Initiate' then simply send a file to this chat. The bot will upload it to the 'main' branch by default.\n\n"
+        "5) <b>Manage Assets:</b> Use the 'Delete' menu to browse and remove files, or use the 'Download' menu to get single files or the entire repo as a ZIP.\n\n"
+        "6) <b>Clean Session:</b> Use /logout anytime to wipe your token from the bot's temporary memory."
     )
     keyboard = [[InlineKeyboardButton("🔙 Back to Start", callback_data="back_to_start")]]
-    await query.edit_message_text(help_text, reply_markup=InlineKeyboardMarkup(keyboard), parse_mode=ParseMode.MARKDOWN_V2)
+    await query.edit_message_text(help_text, reply_markup=InlineKeyboardMarkup(keyboard), parse_mode=ParseMode.HTML)
 
 async def back_to_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
@@ -113,30 +107,30 @@ async def receive_token(update: Update, context: ContextTypes.DEFAULT_TYPE) -> i
     try:
         g = Github(token)
         user = g.get_user()
-        username = escape_md(user.login)
+        username = html.escape(user.login)
         
         context.user_data['github_token'] = token
         context.user_data['github_username'] = username
         
-        await update.message.reply_markdown_v2(f"✅ *Token Verified\\!*\nWelcome, `{username}`\\. Fetching your repositories\\.\\.\\.")
+        await update.message.reply_html(f"✅ <b>Token Verified!</b>\nWelcome, <code>{username}</code>. Fetching your repositories...")
         return await list_repos(update, context)
     except Exception as e:
         logger.error(f"Token validation failed: {e}")
-        await update.message.reply_markdown_v2("❌ *Invalid Token* or connection error\\.\nPlease send a valid GitHub PAT\\.")
+        await update.message.reply_html("❌ <b>Invalid Token</b> or connection error.\nPlease send a valid GitHub PAT.")
         return SETTING_TOKEN
 
 async def list_repos(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     """List repositories for the user."""
     g = get_github_client(context)
     if not g:
-        await update.effective_message.reply_markdown_v2("⚠️ *Session Expired\\.* Please use /start\\.")
+        await update.effective_message.reply_html("⚠️ <b>Session Expired.</b> Please use /start.")
         return ConversationHandler.END
 
     if update.callback_query:
         await update.callback_query.answer()
-        loading_msg = await update.callback_query.edit_message_text("🔄 *Fetching repositories\\.\\.\\.*", parse_mode=ParseMode.MARKDOWN_V2)
+        loading_msg = await update.callback_query.edit_message_text("🔄 <b>Fetching repositories...</b>", parse_mode=ParseMode.HTML)
     else:
-        loading_msg = await update.effective_message.reply_markdown_v2("🔄 *Fetching repositories\\.\\.\\.*")
+        loading_msg = await update.effective_message.reply_html("🔄 <b>Fetching repositories...</b>")
     
     try:
         user_gh = g.get_user()
@@ -144,19 +138,19 @@ async def list_repos(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
         
         keyboard = []
         for repo in repos:
-            repo_name = repo.name
-            keyboard.append([InlineKeyboardButton(f"📁 {repo_name}", callback_data=f"repo:{repo_name}")])
+            repo_name = html.escape(repo.name)
+            keyboard.append([InlineKeyboardButton(f"📁 {repo_name}", callback_data=f"repo:{repo.name}")])
         
         if not keyboard:
-            await loading_msg.edit_text("❌ No repositories found\\.")
+            await loading_msg.edit_text("❌ No repositories found.")
             return ConversationHandler.END
 
         reply_markup = InlineKeyboardMarkup(keyboard)
-        await loading_msg.edit_text(f"{BANNER}*Select a Repository:*", reply_markup=reply_markup, parse_mode=ParseMode.MARKDOWN_V2)
+        await loading_msg.edit_text(f"{BANNER}<b>Select a Repository:</b>", reply_markup=reply_markup, parse_mode=ParseMode.HTML)
         return SELECTING_REPO
     except Exception as e:
         logger.error(f"Error fetching repos: {e}")
-        await loading_msg.edit_text("❌ Failed to fetch repositories\\. Use /logout and try again\\.")
+        await loading_msg.edit_text("❌ Failed to fetch repositories. Use /logout and try again.")
         return ConversationHandler.END
 
 async def repo_choice(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
@@ -180,12 +174,12 @@ async def show_action_menu(update: Update, context: ContextTypes.DEFAULT_TYPE) -
         [InlineKeyboardButton("🔙 Back to Repos", callback_data="back_to_repos")]
     ]
     reply_markup = InlineKeyboardMarkup(keyboard)
-    msg_text = f"{BANNER}📍 *Repo:* `{escape_md(repo_name)}`\nWhat would you like to do?"
+    msg_text = f"{BANNER}📍 <b>Repo:</b> <code>{html.escape(repo_name)}</code>\nWhat would you like to do?"
     
     if update.callback_query:
-        await update.callback_query.edit_message_text(msg_text, reply_markup=reply_markup, parse_mode=ParseMode.MARKDOWN_V2)
+        await update.callback_query.edit_message_text(msg_text, reply_markup=reply_markup, parse_mode=ParseMode.HTML)
     else:
-        await update.message.reply_markdown_v2(msg_text, reply_markup=reply_markup)
+        await update.message.reply_html(msg_text, reply_markup=reply_markup)
     return SELECTING_ACTION
 
 async def download_menu_prompt(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
@@ -200,10 +194,10 @@ async def download_menu_prompt(update: Update, context: ContextTypes.DEFAULT_TYP
     ]
     reply_markup = InlineKeyboardMarkup(keyboard)
     await query.edit_message_text(
-        f"{BANNER}📥 *Download:* `{escape_md(repo_name)}`\n"
+        f"{BANNER}📥 <b>Download:</b> <code>{html.escape(repo_name)}</code>\n"
         "Do you want the entire repository as a ZIP or select a single file?",
         reply_markup=reply_markup,
-        parse_mode=ParseMode.MARKDOWN_V2
+        parse_mode=ParseMode.HTML
     )
     return SELECTING_DOWNLOAD_TYPE
 
@@ -214,7 +208,7 @@ async def download_zip_callback(update: Update, context: ContextTypes.DEFAULT_TY
     g = get_github_client(context)
     repo = g.get_user().get_repo(repo_name)
 
-    await query.edit_message_text(f"⏳ *Preparing ZIP for* `{escape_md(repo_name)}`\\.\\.\\.", parse_mode=ParseMode.MARKDOWN_V2)
+    await query.edit_message_text(f"⏳ <b>Preparing ZIP for</b> <code>{html.escape(repo_name)}</code>...", parse_mode=ParseMode.HTML)
     
     try:
         archive_url = repo.get_archive_link("zipball")
@@ -222,13 +216,13 @@ async def download_zip_callback(update: Update, context: ContextTypes.DEFAULT_TY
             chat_id=update.effective_chat.id,
             document=archive_url,
             filename=f"{repo_name}_main.zip",
-            caption=f"📦 *Archive for* `{escape_md(repo_name)}` \\(main branch\\)",
-            parse_mode=ParseMode.MARKDOWN_V2
+            caption=f"📦 <b>Archive for</b> <code>{html.escape(repo_name)}</code> (main branch)",
+            parse_mode=ParseMode.HTML
         )
         return await show_action_menu(update, context)
     except Exception as e:
         logger.error(f"ZIP error: {e}")
-        await query.edit_message_text(f"❌ *ZIP Failed:*\n`{escape_md(str(e))}`", parse_mode=ParseMode.MARKDOWN_V2)
+        await query.edit_message_text(f"❌ <b>ZIP Failed:</b>\n<code>{html.escape(str(e))}</code>", parse_mode=ParseMode.HTML)
         return SELECTING_ACTION
 
 async def list_contents(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
@@ -267,29 +261,29 @@ async def render_contents(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
             keyboard.append([InlineKeyboardButton("📁 .. (Parent)", callback_data=f"cd:{parent_path}")])
 
         for content in contents:
-            content_path = content.path
+            content_path = html.escape(content.path)
             if content.type == "dir":
-                keyboard.append([InlineKeyboardButton(f"📁 {content.name}", callback_data=f"cd:{content_path}")])
+                keyboard.append([InlineKeyboardButton(f"📁 {content.name}", callback_data=f"cd:{content.path}")])
             else:
                 prefix = "🗑" if action == "delete" else "📥"
                 callback_prefix = "delete" if action == "delete" else "download_file"
-                keyboard.append([InlineKeyboardButton(f"{prefix} {content.name}", callback_data=f"{callback_prefix}:{content_path}")])
+                keyboard.append([InlineKeyboardButton(f"{prefix} {content.name}", callback_data=f"{callback_prefix}:{content.path}")])
         
         keyboard.append([InlineKeyboardButton("🔙 Back", callback_data="back_to_menu")])
         reply_markup = InlineKeyboardMarkup(keyboard)
         
-        display_path = escape_md(path) if path else "Root"
+        display_path = html.escape(path) if path else "Root"
         mode_text = "DELETE" if action == "delete" else "DOWNLOAD"
         await query.edit_message_text(
-            f"{BANNER}📂 *{mode_text} Path:* `{escape_md(repo_name)}/{display_path}`\n\n"
-            "_Select a file or folder\\._", 
+            f"{BANNER}📂 <b>{mode_text} Path:</b> <code>{html.escape(repo_name)}/{display_path}</code>\n\n"
+            "<i>Select a file or folder.</i>", 
             reply_markup=reply_markup,
-            parse_mode=ParseMode.MARKDOWN_V2
+            parse_mode=ParseMode.HTML
         )
         return LISTING_CONTENTS
     except Exception as e:
         logger.error(f"Error listing contents: {e}")
-        await query.edit_message_text(f"❌ Error listing contents: `{escape_md(str(e))}`", parse_mode=ParseMode.MARKDOWN_V2)
+        await query.edit_message_text(f"❌ Error listing contents: <code>{html.escape(str(e))}</code>", parse_mode=ParseMode.HTML)
         return SELECTING_ACTION
 
 async def delete_file_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
@@ -304,11 +298,11 @@ async def delete_file_callback(update: Update, context: ContextTypes.DEFAULT_TYP
     try:
         contents = repo.get_contents(file_path)
         repo.delete_file(contents.path, f"Deleted {file_path} via Bot", contents.sha, branch="main")
-        await query.edit_message_text(f"✅ *Successfully Deleted:*\n`{escape_md(file_path)}`", parse_mode=ParseMode.MARKDOWN_V2)
+        await query.edit_message_text(f"✅ <b>Successfully Deleted:</b>\n<code>{html.escape(file_path)}</code>", parse_mode=ParseMode.HTML)
         return await show_action_menu(update, context)
     except Exception as e:
         logger.error(f"Error deleting file: {e}")
-        await query.edit_message_text(f"❌ *Deletion Failed:*\n`{escape_md(str(e))}`", parse_mode=ParseMode.MARKDOWN_V2)
+        await query.edit_message_text(f"❌ <b>Deletion Failed:</b>\n<code>{html.escape(str(e))}</code>", parse_mode=ParseMode.HTML)
         return SELECTING_ACTION
 
 async def download_file_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
@@ -320,7 +314,7 @@ async def download_file_callback(update: Update, context: ContextTypes.DEFAULT_T
     g = get_github_client(context)
     repo = g.get_user().get_repo(repo_name)
     
-    await query.edit_message_text(f"⏳ *Downloading* `{escape_md(file_path)}`\\.\\.\\.", parse_mode=ParseMode.MARKDOWN_V2)
+    await query.edit_message_text(f"⏳ <b>Downloading</b> <code>{html.escape(file_path)}</code>...", parse_mode=ParseMode.HTML)
     
     try:
         contents = repo.get_contents(file_path)
@@ -328,13 +322,13 @@ async def download_file_callback(update: Update, context: ContextTypes.DEFAULT_T
             chat_id=update.effective_chat.id,
             document=contents.download_url,
             filename=contents.name,
-            caption=f"📥 *File:* `{escape_md(file_path)}`",
-            parse_mode=ParseMode.MARKDOWN_V2
+            caption=f"📥 <b>File:</b> <code>{html.escape(file_path)}</code>",
+            parse_mode=ParseMode.HTML
         )
         return await show_action_menu(update, context)
     except Exception as e:
         logger.error(f"Download file error: {e}")
-        await query.edit_message_text(f"❌ *Download Failed:*\n`{escape_md(str(e))}`", parse_mode=ParseMode.MARKDOWN_V2)
+        await query.edit_message_text(f"❌ <b>Download Failed:</b>\n<code>{html.escape(str(e))}</code>", parse_mode=ParseMode.HTML)
         return SELECTING_ACTION
 
 async def initiate_prompt(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
@@ -342,21 +336,21 @@ async def initiate_prompt(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
     await query.answer()
     await query.edit_message_text(
         f"{BANNER}"
-        "📤 *Send the file* you want to upload to the `main` branch\\.",
-        parse_mode=ParseMode.MARKDOWN_V2
+        "📤 <b>Send the file</b> you want to upload to the <code>main</code> branch.",
+        parse_mode=ParseMode.HTML
     )
     return SELECTING_ACTION
 
 async def handle_document(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     repo_name = context.user_data.get('repo_name')
     if not repo_name:
-        await update.message.reply_markdown_v2("⚠️ *Select a repository first\\!*")
+        await update.message.reply_html("⚠️ <b>Select a repository first!</b>")
         return ConversationHandler.END
         
     document = update.message.document
     file_name = document.file_name
     
-    status_msg = await update.message.reply_markdown_v2(f"🔄 *Uploading* `{escape_md(file_name)}`\\.\\.\\.")
+    status_msg = await update.message.reply_html(f"🔄 <b>Uploading</b> <code>{html.escape(file_name)}</code>...")
     
     try:
         file = await context.bot.get_file(document.file_id)
@@ -368,15 +362,15 @@ async def handle_document(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
         try:
             contents = repo.get_contents(file_name, ref="main")
             repo.update_file(contents.path, f"Update {file_name} via Bot", bytes(file_bytes), contents.sha, branch="main")
-            await status_msg.edit_text(f"✅ *Updated:* `{escape_md(file_name)}`", parse_mode=ParseMode.MARKDOWN_V2)
+            await status_msg.edit_text(f"✅ <b>Updated:</b> <code>{html.escape(file_name)}</code>", parse_mode=ParseMode.HTML)
         except:
             repo.create_file(file_name, f"Upload {file_name} via Bot", bytes(file_bytes), branch="main")
-            await status_msg.edit_text(f"✅ *Uploaded:* `{escape_md(file_name)}`", parse_mode=ParseMode.MARKDOWN_V2)
+            await status_msg.edit_text(f"✅ <b>Uploaded:</b> <code>{html.escape(file_name)}</code>", parse_mode=ParseMode.HTML)
             
         return await show_action_menu(update, context)
     except Exception as e:
         logger.error(f"Error uploading file: {e}")
-        await update.message.reply_markdown_v2(f"❌ *Upload Failed:*\n`{escape_md(str(e))}`")
+        await update.message.reply_html(f"❌ <b>Upload Failed:</b>\n{html.escape(str(e))}")
         return SELECTING_ACTION
 
 async def back_to_menu(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
@@ -385,19 +379,19 @@ async def back_to_menu(update: Update, context: ContextTypes.DEFAULT_TYPE) -> in
 
 async def logout(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     context.user_data.clear()
-    await update.message.reply_markdown_v2("👋 *Logged Out\\.* Your session has been cleared\\.")
+    await update.message.reply_html("👋 <b>Logged Out.</b> Your session has been cleared.")
     return ConversationHandler.END
 
 async def cancel(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    await update.message.reply_markdown_v2("❌ *Operation Cancelled\\.*")
+    await update.message.reply_html("❌ <b>Operation Cancelled.</b>")
     return ConversationHandler.END
 
 async def set_token_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    await update.message.reply_markdown_v2("🔑 *Please send your NEW GitHub PAT:*")
+    await update.message.reply_html("🔑 <b>Please send your NEW GitHub PAT:</b>")
     return SETTING_TOKEN
 
 async def ping(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    await update.message.reply_markdown_v2("🏓 *Pong\\!* Bot is active\\.")
+    await update.message.reply_html("🏓 <b>Pong!</b> Bot is active.")
 
 def main():
     application = Application.builder().token(config.TELEGRAM_BOT_TOKEN).build()
