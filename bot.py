@@ -237,7 +237,7 @@ async def render_contents(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
         return LISTING_CONTENTS
     except Exception as e:
         logger.error(f"Error listing contents: {e}")
-        await query.edit_message_text(f"❌ Error listing contents: {e}")
+        await query.edit_message_text(f"❌ Error listing contents: <code>{html.escape(str(e))}</code>", parse_mode=ParseMode.HTML)
         return SELECTING_ACTION
 
 async def delete_file_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
@@ -252,11 +252,11 @@ async def delete_file_callback(update: Update, context: ContextTypes.DEFAULT_TYP
     try:
         contents = repo.get_contents(file_path)
         repo.delete_file(contents.path, f"Deleted {file_path} via Bot", contents.sha, branch="main")
-        await query.edit_message_text(f"✅ <b>Successfully Deleted:</b>\n<code>{html.escape(file_path)}</code>")
+        await query.edit_message_text(f"✅ <b>Successfully Deleted:</b>\n<code>{html.escape(file_path)}</code>", parse_mode=ParseMode.HTML)
         return await show_action_menu(update, context)
     except Exception as e:
         logger.error(f"Error deleting file: {e}")
-        await query.edit_message_text(f"❌ <b>Deletion Failed:</b>\n{e}")
+        await query.edit_message_text(f"❌ <b>Deletion Failed:</b>\n<code>{html.escape(str(e))}</code>", parse_mode=ParseMode.HTML)
         return SELECTING_ACTION
 
 async def download_file_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
